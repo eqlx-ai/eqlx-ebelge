@@ -1,6 +1,6 @@
 [project]
 name = "eqlx-ebelge"
-version = "0.1.0"
+version = "0.1.1"
 description = "Read Turkish e-Fatura (UBL-TR) and e-Defter (XBRL-GL) files: clean data, trial balance, consistency checks, and an MCP server for AI agents."
 readme = "README.md"
 authors = [
@@ -54,6 +54,10 @@ target-version = "py310"
 select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
 # Turkish letters (ı, İ, ş, ğ) are intended in names, comments and sample data.
 ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# XML fixtures read best on one line.
+"tests/*" = ["E501"]
 
 [tool.mypy]
 strict = true

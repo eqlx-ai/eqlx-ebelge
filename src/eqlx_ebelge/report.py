@@ -59,6 +59,10 @@ def scan(paths: Iterable[str | Path], limits: Limits | None = None) -> Report:
                 rep.findings.append(Finding("unsupported", "info", msg, doc.name))
         except EbelgeError as exc:
             reason = exc.code + (f": {exc.detail}" if exc.detail else "")
-            rep.findings.append(Finding("unreadable", "error", reason, doc.name))
+            if exc.code in ("not_an_invoice", "unsupported_ledger_type"):
+                msg = f"not an invoice or a journal/ledger ({reason})"
+                rep.findings.append(Finding("unsupported", "info", msg, doc.name))
+            else:
+                rep.findings.append(Finding("unreadable", "error", reason, doc.name))
     rep.findings.extend(find_duplicates(rep.invoices))
     return rep

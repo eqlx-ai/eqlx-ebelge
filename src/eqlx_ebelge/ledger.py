@@ -172,6 +172,9 @@ class _LedgerReader:
             depth -= 1
             if el.tag == f"{COR}entryHeader":
                 in_entry -= 1
+                kind = self.head.get("entries_type")
+                if kind not in (None, "journal", "ledger"):
+                    raise EbelgeError("unsupported_ledger_type", self.source, f"entriesType {kind!r}")
                 entries.append(self.entry(el))
                 el.clear()
             elif not in_entry:
@@ -204,21 +207,25 @@ def check_ledger(ledger: Ledger) -> list[Finding]:
         msg = f"taxpayer id {h.tax_id} fails its check digit"
         out.append(Finding("tax_id_check_digit", "warning", msg, src, "header.tax_id"))
 
+    # In a general ledger (kebir) each entryHeader groups one account's postings: it does not balance on
+    # its own, and its header totals may be the account's net balance rather than gross sums.
+    is_kebir = h.entries_type == "ledger"
     seen: dict[int, int] = {}
     for e in ledger.entries:
         where = f"entry {e.counter if e.counter is not None else e.number}"
         if not e.lines:
             out.append(Finding("empty_entry", "warning", f"{where} has no lines", src, where))
             continue
-        if e.debit != e.credit:
+        if not is_kebir and e.debit != e.credit:
             msg = f"{where}: debit {e.debit} != credit {e.credit}"
             out.append(Finding("entry_unbalanced", "error", msg, src, where))
-        if e.total_debit is not None and e.total_debit != e.debit:
-            msg = f"{where}: totalDebit {e.total_debit}, lines {e.debit}"
-            out.append(Finding("entry_total", "error", msg, src, where))
-        if e.total_credit is not None and e.total_credit != e.credit:
-            msg = f"{where}: totalCredit {e.total_credit}, lines {e.credit}"
-            out.append(Finding("entry_total", "error", msg, src, where))
+        if e.total_debit is not None or e.total_credit is not None:
+            gross = (e.debit, e.credit)
+            net = (max(e.debit - e.credit, Decimal(0)), max(e.credit - e.debit, Decimal(0)))
+            header = (e.total_debit or Decimal(0), e.total_credit or Decimal(0))
+            if header != gross and not (is_kebir and header == net):
+                msg = f"{where}: header totals {header[0]} / {header[1]}, lines {e.debit} / {e.credit}"
+                out.append(Finding("entry_total", "error", msg, src, where))
         if e.counter is not None:
             seen[e.counter] = seen.get(e.counter, 0) + 1
         if (

@@ -4,7 +4,7 @@ Clean data, a trial balance, and consistency checks, all locally. An optional MC
 the same functions read-only.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .errors import EbelgeError, Finding
 from .ids import is_valid_tax_id, is_valid_tckn, is_valid_vkn
