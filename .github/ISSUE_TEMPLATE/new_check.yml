@@ -1,0 +1,16 @@
+name: New check or format
+description: Propose a check, or support for another document type or profile.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What and why
+      description: What the check catches or what document it reads, and who needs it.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Public source
+      description: The GİB guide or standard that defines the rule or format.

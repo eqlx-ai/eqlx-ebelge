@@ -1,0 +1,25 @@
+name: Bug report
+description: A file is read wrongly, a check is wrong, or something fails.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "**Do not attach real invoices or ledgers.** Describe the structure, or reproduce it with `eqlx_ebelge.synthetic`."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: structure
+    attributes:
+      label: Document structure
+      description: Profile (e.g. TICARIFATURA, EARSIVFATURA), invoice type, the XML elements involved, with values replaced by dummies.
+      render: xml
+  - type: input
+    id: version
+    attributes:
+      label: Versions
+      description: eqlx-ebelge and Python versions.

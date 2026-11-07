@@ -1,0 +1,63 @@
+[project]
+name = "eqlx-ebelge"
+version = "0.1.0"
+description = "Read Turkish e-Fatura (UBL-TR) and e-Defter (XBRL-GL) files: clean data, trial balance, consistency checks, and an MCP server for AI agents."
+readme = "README.md"
+authors = [
+    { name = "Can Demir", email = "can.demir@eqlx.ai" }
+]
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["e-fatura", "e-defter", "ubl-tr", "xbrl-gl", "gib", "turkey", "invoice", "trial balance", "mcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "Natural Language :: Turkish",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Financial :: Accounting",
+]
+dependencies = [
+    "defusedxml>=0.7",
+]
+
+[project.optional-dependencies]
+mcp = [
+    "mcp>=2.3.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.16,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+    "types-defusedxml>=0.7.0.20260504",
+]
+
+[project.scripts]
+ebelge = "eqlx_ebelge.cli:main"
+
+[project.urls]
+Homepage = "https://eqlx.org"
+Source = "https://github.com/eqlx-ai/eqlx-ebelge"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
+# Turkish letters (ı, İ, ş, ğ) are intended in names, comments and sample data.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["mcp.*"]
+ignore_missing_imports = true
