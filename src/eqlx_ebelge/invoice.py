@@ -25,6 +25,10 @@ CAC = "{urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
 CBC = "{urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2}"
 
 CENT = Decimal("0.01")
+KDV = "0015"
+#: Income and corporate tax withheld at source (GV / KV stopajı): listed among the taxes but deducted
+#: from the amount payable, not added to it.
+STOPAJ_CODES = frozenset({"0003", "0011"})
 _NUMBER = re.compile(r"^[A-Z0-9]{3}(\d{4})\d{9}$")
 _UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
@@ -45,6 +49,7 @@ class Tax:
     percent: Decimal | None
     taxable: Decimal | None
     amount: Decimal | None
+    exemption_code: str | None = None  # TaxExemptionReasonCode, e.g. "308"; the tax is then not charged
 
 
 @dataclass(frozen=True)
@@ -69,6 +74,7 @@ class Totals:
     charge_total: Decimal | None
     payable_rounding: Decimal | None
     payable: Decimal | None
+    prepaid: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -149,6 +155,7 @@ class _Reader:
         out = []
         for sub in total.findall(f"{CAC}TaxSubtotal"):
             scheme = sub.find(f"{CAC}TaxCategory/{CAC}TaxScheme")
+            exemption = text(sub.find(f"{CAC}TaxCategory/{CBC}TaxExemptionReasonCode"))
             out.append(
                 Tax(
                     type_code=text(scheme.find(f"{CBC}TaxTypeCode")) if scheme is not None else None,
@@ -156,6 +163,7 @@ class _Reader:
                     percent=parse_decimal(text(sub.find(f"{CBC}Percent")), self.source, "Percent"),
                     taxable=self.amount(sub, f"{CBC}TaxableAmount"),
                     amount=self.amount(sub, f"{CBC}TaxAmount"),
+                    exemption_code=exemption,
                 )
             )
         return tuple(out)
@@ -214,6 +222,7 @@ class _Reader:
                 charge_total=self.amount(lmt, f"{CBC}ChargeTotalAmount"),
                 payable_rounding=self.amount(lmt, f"{CBC}PayableRoundingAmount"),
                 payable=self.amount(lmt, f"{CBC}PayableAmount"),
+                prepaid=self.amount(lmt, f"{CBC}PrepaidAmount"),
             ),
             notes=tuple(n for n in (text(e) for e in root.findall(f"{CBC}Note")) if n),
         )
@@ -326,46 +335,104 @@ def check_invoice(inv: Invoice) -> list[Finding]:
         msg = "invoice has no LegalMonetaryTotal"
         out.append(Finding("totals_missing", "error", msg, src, "totals"))
         return out
+    _check_amounts(inv, out)
+    return out
 
-    line_sum = sum((ln.amount for ln in inv.lines if ln.amount is not None), Decimal(0))
-    if inv.lines and (g := _gap(line_sum, t.line_extension, CENT)) is not None:
-        msg = f"lines add up to {line_sum}, LineExtensionAmount is {t.line_extension} (gap {g})"
-        out.append(Finding("lines_total", "error", msg, src, "totals.line_extension"))
+
+def _sum(values: Iterable[Decimal | None]) -> Decimal:
+    return sum((v for v in values if v is not None), Decimal(0))
+
+
+def _closest(candidates: list[Decimal], actual: Decimal) -> tuple[Decimal, Decimal]:
+    best = min(candidates, key=lambda c: abs(c - actual))
+    return best, abs(best - actual)
+
+
+def _check_amounts(inv: Invoice, out: list[Finding]) -> None:
+    """Totals checks. UBL-TR allows a few equivalent ways to write the same invoice, all seen in GİB's own
+    samples, so each total is compared with every accepted reading and flagged only if none fits:
+
+    * ``LineExtensionAmount`` is either the sum of the net line amounts, or the gross amount before
+      discounts, with the discounts in ``AllowanceTotalAmount``.
+    * A tax subtotal with an exemption reason code (istisna) usually shows the tax that would apply
+      while none is charged; some exemptions (e.g. 501) charge it and refund it later. Both are
+      accepted. Withholding taxes (stopaj, codes 0003 and 0011) are deducted from the amount payable.
+    * ``TaxTotal`` is the tax charged, or, in some withholding (tevkifat) invoices, the tax left after
+      the withheld part.
+    * The amount payable is the tax-inclusive total less withholding, stopaj and prepayments, plus
+      rounding; HKS (wholesale market) invoices also deduct the market charges in ``ChargeTotalAmount``.
+    """
+    t, src = inv.totals, inv.source
+    zero = Decimal(0)
+    charged = [x for x in inv.taxes if x.exemption_code is None and x.type_code not in STOPAJ_CODES]
+    stopaj = _sum(x.amount for x in inv.taxes if x.type_code in STOPAJ_CODES)
+    tax_charged = _sum(x.amount for x in charged)
+    # Some exemptions (e.g. 501, tax-free shopping) still charge the tax and refund it later.
+    tax_listed = _sum(x.amount for x in inv.taxes if x.type_code not in STOPAJ_CODES)
+    withheld = inv.withholding_total or zero
+
+    if inv.lines and t.line_extension is not None:
+        net = _sum(ln.amount for ln in inv.lines)
+        gross = _sum((ln.amount or zero) + ln.allowance - ln.charge for ln in inv.lines)
+        cands = [net, gross]
+        if t.allowance_total is not None:
+            cands.append(net + t.allowance_total)
+        best, g = _closest(cands, t.line_extension)
+        if g > CENT:
+            msg = f"lines add up to {net}, LineExtensionAmount is {t.line_extension} (gap {g})"
+            out.append(Finding("lines_total", "error", msg, src, "totals.line_extension"))
 
     per_line = CENT + Decimal("0.005") * max(len(inv.lines), 1)
-    for tax in inv.taxes:
+    for tax in charged + [x for x in inv.taxes if x.type_code in STOPAJ_CODES]:
         if tax.taxable is None or tax.percent is None or tax.amount is None:
             continue
         expected = _round(tax.taxable * tax.percent / 100)
-        if (g := _gap(expected, tax.amount, per_line)) is not None:
+        if (gap := _gap(expected, tax.amount, per_line)) is not None:
             label = tax.name or tax.type_code
-            msg = f"{label} {tax.percent}% of {tax.taxable} is {expected}, invoice says {tax.amount}"
+            msg = (
+                f"{label} {tax.percent}% of {tax.taxable} is {expected}, "
+                f"invoice says {tax.amount} (gap {gap})"
+            )
             out.append(Finding("tax_rate", "warning", msg, src, "taxes"))
+
     if inv.taxes and inv.tax_total is not None:
-        sub_sum = sum((x.amount for x in inv.taxes if x.amount is not None), Decimal(0))
-        if (g := _gap(sub_sum, inv.tax_total, CENT)) is not None:
-            msg = f"tax subtotals add up to {sub_sum}, TaxTotal is {inv.tax_total} (gap {g})"
+        cands = [tax_charged, tax_charged - withheld, tax_charged + stopaj, tax_listed, tax_listed - withheld]
+        best, g = _closest(cands, inv.tax_total)
+        if g > CENT:
+            msg = f"taxes charged add up to {tax_charged}, TaxTotal is {inv.tax_total} (gap {g})"
             out.append(Finding("tax_total", "error", msg, src, "tax_total"))
 
-    if t.tax_exclusive is not None and t.tax_inclusive is not None:
-        expected = t.tax_exclusive + (inv.tax_total or Decimal(0))
-        if (g := _gap(expected, t.tax_inclusive, CENT)) is not None:
-            msg = (
-                f"TaxExclusiveAmount + taxes = {expected}, TaxInclusiveAmount is {t.tax_inclusive} (gap {g})"
-            )
-            out.append(Finding("tax_inclusive", "error", msg, src, "totals.tax_inclusive"))
+    if t.tax_inclusive is not None:
+        cands = []
+        if t.tax_exclusive is not None:
+            cands += [
+                t.tax_exclusive + (inv.tax_total or zero),
+                t.tax_exclusive + tax_charged,
+                t.tax_exclusive + stopaj + tax_charged,
+                t.tax_exclusive + tax_listed,
+            ]
+        if t.line_extension is not None:
+            base = t.line_extension - (t.allowance_total or zero)
+            cands += [t.line_extension + tax_charged, base + tax_charged, base + tax_listed]
+        if cands:
+            best, g = _closest(cands, t.tax_inclusive)
+            if g > CENT:
+                msg = f"amount before tax + taxes = {best}, TaxInclusiveAmount is {t.tax_inclusive} (gap {g})"
+                out.append(Finding("tax_inclusive", "error", msg, src, "totals.tax_inclusive"))
+
     if t.tax_inclusive is not None and t.payable is not None:
-        expected = (
-            t.tax_inclusive - (inv.withholding_total or Decimal(0)) + (t.payable_rounding or Decimal(0))
-        )
-        if (g := _gap(expected, t.payable, CENT)) is not None:
+        base = t.tax_inclusive - withheld - stopaj - (t.prepaid or zero) + (t.payable_rounding or zero)
+        cands = [base]
+        if (inv.profile or "").upper() == "HKS" and t.charge_total is not None:
+            cands.append(base - t.charge_total)
+        best, g = _closest(cands, t.payable)
+        if g > CENT:
             msg = (
-                f"TaxInclusiveAmount - withholding + rounding = {expected}, "
+                f"TaxInclusiveAmount less withholding, stopaj and prepayment = {best}, "
                 f"PayableAmount is {t.payable} (gap {g})"
             )
             sev: Severity = "error" if g > Decimal(1) else "warning"
             out.append(Finding("payable", sev, msg, src, "totals.payable"))
-    return out
 
 
 def _name(source: str) -> str:

@@ -13,9 +13,13 @@ What eqlx-ebelge does **not** do in version 0.1. Read this before relying on it.
 - **e-Defter journal and ledger files only.** Berat (seal) files and the e-Defter report (defter raporu)
   are not read. The trial balance is built from the entries; opening and closing entries are included
   as they appear.
-- **Not every UBL-TR profile is exercised.** Tests cover TEMELFATURA/TICARIFATURA sales invoices,
-  individuals, the e-Arşiv placeholder TCKN, withholding (tevkifat) and GİB envelopes. Export, public
-  sector, energy and other special profiles are read with the same rules but not specifically tested.
+- **Checked against GİB's public samples, not against every issuer.** The totals checks accept the
+  writing variants seen in GİB's sample invoices: exemptions (istisna) that show or charge the tax,
+  stopaj deducted from the payable amount, withholding (tevkifat) with the tax total before or after the
+  withheld part, HKS market charges, and line totals written before discounts. Other issuers may write
+  totals in ways not yet seen; please report them.
+- **e-Defter journal (yevmiye) and general ledger (kebir) only.** In a kebir, entries are read per
+  account. Other e-Defter types (e.g. the 2026 assets book) are reported as unsupported.
 - **Findings are signals, not decisions.** A warning is a reason to look, not proof of fraud. Legal,
   tax and credit decisions stay with qualified people.
 - **Memory.** A journal file is read entry by entry, but the kept lines stay in memory (about 5 million
