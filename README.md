@@ -1,5 +1,7 @@
 # eqlx-ebelge
 
+[![PyPI](https://img.shields.io/pypi/v/eqlx-ebelge)](https://pypi.org/project/eqlx-ebelge/) [![CI](https://github.com/eqlx-ai/eqlx-ebelge/actions/workflows/ci.yml/badge.svg)](https://github.com/eqlx-ai/eqlx-ebelge/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 Read Turkish **e-Fatura** (UBL-TR) and **e-Defter** (XBRL GL) files: clean data, a trial balance
 (mizan), and consistency checks that catch wrong totals, invalid tax ids, duplicate invoices and
 unbalanced journal entries. An optional **MCP server** lets AI agents such as Claude use the same
@@ -21,7 +23,7 @@ locally, with no network access.
 ## Install
 
 ```bash
-pip install "eqlx-ebelge[mcp] @ git+https://github.com/eqlx-ai/eqlx-ebelge"
+pip install "eqlx-ebelge[mcp]"
 ```
 
 Python 3.10+. The core needs only `defusedxml`; `[mcp]` adds the MCP server.
