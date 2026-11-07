@@ -60,13 +60,13 @@ import eqlx_ebelge as eb
 
 inv = eb.read_invoice(Path("fatura.xml").read_bytes(), "fatura.xml")
 inv.supplier.tax_id, inv.totals.payable, [line.name for line in inv.lines]
-eb.check_invoice(inv)                       # list of Finding(code, severity, message, ...)
+eb.check_invoice(inv)  # list of Finding(code, severity, message, ...)
 
 report = eb.scan(["inbox/", "archive.zip"])  # every document, every check, duplicates across all
 report.summary()
 
 ledgers = [eb.read_ledger(p.read_bytes(), p.name) for p in sorted(Path("edefter").glob("*.xml"))]
-rows = eb.trial_balance(ledgers)             # e.g. twelve monthly journals -> one year's mizan
+rows = eb.trial_balance(ledgers)  # e.g. twelve monthly journals -> one year's mizan
 ```
 
 Amounts are `Decimal`, never floats.
