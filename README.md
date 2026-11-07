@@ -7,8 +7,10 @@ functions, read-only.
 
 Built by [eqlx](https://eqlx.ai). Part of [eqlx.org](https://eqlx.org), open research and tools.
 
-> Status: alpha (0.1). Tested on synthetic documents built to GİB's published formats. Please
-> report any real-world file it reads wrongly (without sending the file itself).
+> Status: alpha (0.1.1). Tested on synthetic documents and checked against GİB's public sample
+> packages (e-Fatura, e-Arşiv, e-Defter): on those samples it raises no false alarms, and the
+> findings it does raise are real inconsistencies in the samples. Please report any real-world file it
+> reads wrongly (without sending the file itself).
 
 ## Why
 
